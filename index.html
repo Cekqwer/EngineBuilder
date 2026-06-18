@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>ENGINE BUILDER — Фізичний Симулятор</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;500;700;900&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:     #0a0b0d;
+  --panel:  #111318;
+  --panel2: #161a21;
+  --border: #2a2f3a;
+  --accent: #e85d00;
+  --accent2:#ffa033;
+  --green:  #00e87a;
+  --red:    #e82020;
+  --blue:   #0090ff;
+  --text:   #d0d4dc;
+  --dim:    #5a6070;
+  --mono:   'Share Tech Mono', monospace;
+  --head:   'Barlow Condensed', sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.screen { display: none; min-height: 100vh; }
+.screen.active { display: block; }
+
+/* =========== BUILD =========== */
+#build-screen { padding: 12px; }
+
+.build-title {
+  font-family: var(--head);
+  font-weight: 900;
+  font-size: clamp(22px, 5vw, 38px);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-align: center;
+  padding: 10px 0 4px;
+}
+.build-sub {
+  text-align: center;
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  margin-bottom: 14px;
+}
+
+.build-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+@media (max-width: 500px) { .build-grid { grid-template-columns: 1fr; } }
+
+.build-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+}
+.build-card.full { grid-column: 1 / -1; }
+
+.card-label {
+  font-family: var(--head);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.opt-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+
+.opt-btn {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.opt-btn:hover { border-color: var(--accent); color: var(--text); }
+.opt-btn.sel   { background: var(--accent); border-color: var(--accent); color:#fff; font-weight:bold; }
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.slider-row label {
+  font-size: 10px;
+  color: var(--dim);
+  min-width: 90px;
+  letter-spacing: 0.08em;
+}
+.slider-row input[type=range] {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  outline: none;
+}
+.slider-row input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+.slider-val { font-size: 12px; color: var(--accent2); min-width: 55px; text-align:right; }
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  padding: 3px 0;
+  border-bottom: 1px solid #1a1f28;
+}
+.stat-row .sk { color: var(--dim); }
+.stat-row .sv { color: var(--green); font-weight: bold; }
+
+.start-btn {
+  display: block;
+  width: 100%; max-width: 400px;
+  margin: 18px auto 12px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  font-family: var(--head);
+  font-weight: 900;
+  font-size: 20px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+  touch-action: manipulation;
+}
+.start-btn:hover { background: var(--accent2); }
+
+/* =========== RUN SCREEN =========== */
+#run-screen {
+  display: none;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+#run-screen.active { display: flex; }
+
+#engine-canvas { display: block; width: 100%; flex-shrink: 0; }
+
+.warn-bar {
+  display: flex;
+  gap: 5px;
+  padding: 4px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.warn-pill {
+  font-size: 9px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  letter-spacing: 0.1em;
+  font-weight: bold;
+  opacity: 0.3;
+  transition: opacity 0.15s;
+}
+.warn-pill.active { opacity: 1; }
+.warn-knock   { background:#7a2000; color:#ffa033; }
+.warn-overheat{ background:#7a0000; color:#ff5555; }
+.warn-lean    { background:#004040; color:#00ffcc; }
+.warn-rich    { background:#404000; color:#ffff00; }
+.warn-stall   { background:#2a0050; color:#cc88ff; }
+.warn-sparkcut{ background:#0a3a5a; color:#60c0ff; }
+
+.gauges {
+  display: flex;
+  gap: 5px;
+  padding: 5px 8px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.gauge {
+  flex: 1;
+  min-width: 70px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 4px 6px;
+  text-align: center;
+}
+.gauge-label { font-size: 9px; color: var(--dim); letter-spacing:0.12em; text-transform:uppercase; }
+.gauge-val   { font-family: var(--head); font-weight:700; font-size:19px; color:var(--accent2); line-height:1.1; }
+.gauge-unit  { font-size: 9px; color: var(--dim); }
+
+.rpm-arc-wrap { position: relative; width: 88px; flex-shrink:0; }
+.rpm-arc-wrap svg { width: 88px; height: 54px; }
+.rpm-number {
+  position: absolute;
+  bottom: 1px; left:0; right:0;
+  text-align: center;
+  font-family: var(--head);
+  font-weight: 900;
+  font-size: 17px;
+  color: var(--accent);
+}
+
+.data-log {
+  font-size: 10px;
+  color: var(--dim);
+  padding: 3px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.controls {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ctrl-label {
+  font-size: 10px;
+  color: var(--dim);
+  min-width: 70px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ctrl-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+  touch-action: none;
+}
+.ctrl-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+#throttle-slider {
+  background: linear-gradient(to right, #1a1f28, var(--accent));
+}
+#throttle-slider::-webkit-slider-thumb { background: var(--accent); }
+
+#temp-slider {
+  background: linear-gradient(to right, #0040a0, #a00000);
+}
+#temp-slider::-webkit-slider-thumb { background: #6090ff; }
+
+.ctrl-val { font-size: 13px; color: var(--accent2); min-width: 60px; text-align:right; }
+
+/* Sound toggle */
+.sound-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sound-toggle {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  touch-action: manipulation;
+}
+.sound-toggle.on { background: var(--green); border-color: var(--green); color:#000; font-weight:bold; }
+
+.btn-row { display: flex; gap: 8px; }
+.ctrl-btn {
+  flex: 1;
+  padding: 13px;
+  border-radius: 6px;
+  border: none;
+  font-family: var(--head);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+#btn-start-engine { background: var(--green); color:#000; }
+#btn-start-engine:active { background: #00c065; }
+#btn-stop-engine  { background: var(--red);   color:#fff; }
+#btn-stop-engine:active  { background: #b01010; }
+#btn-back         { background: var(--panel);  color: var(--dim); border:1px solid var(--border); }
+
+@keyframes vib {
+  0%,100% { transform:translate(0,0) rotate(0deg); }
+  20%      { transform:translate(-1px,1px) rotate(-0.3deg); }
+  40%      { transform:translate(1px,-1px) rotate(0.3deg); }
+  60%      { transform:translate(-1px,-1px) rotate(-0.2deg); }
+  80%      { transform:translate(1px,1px) rotate(0.2deg); }
+}
+.vibrating { animation: vib 0.06s infinite; }
+
+#smoke-canvas {
+  position:fixed; top:0; left:0;
+  pointer-events:none; z-index:10;
+  display:none;
+}
+</style>
+</head>
+<body>
+
+<!-- ======= BUILD SCREEN ======= -->
+<div id="build-screen" class="screen active">
+  <div class="build-title">⚙ ENGINE BUILDER</div>
+  <div class="build-sub">ФІЗИЧНИЙ СИМУЛЯТОР · REAL PHYSICS · NO SCRIPTS</div>
+
+  <div class="build-grid">
+
+    <div class="build-card">
+      <div class="card-label">Циліндри</div>
+      <div class="opt-row" id="opt-cylinders">
+        <button class="opt-btn sel" data-v="1">1</button>
+        <button class="opt-btn" data-v="2">2</button>
+        <button class="opt-btn" data-v="3">3</button>
+        <button class="opt-btn" data-v="4">4</button>
+        <button class="opt-btn" data-v="5">5</button>
+        <button class="opt-btn" data-v="6">6</button>
+        <button class="opt-btn" data-v="8">8</button>
+        <button class="opt-btn" data-v="10">10</button>
+        <button class="opt-btn" data-v="12">12</button>
+        <button class="opt-btn" data-v="16">16</button>
+      </div>
+    </div>
+
+    <div class="build-card">
+      <div class="card-label">Маховик</div>
+      <div class="opt-row" id="opt-flywheel-mat">
+        <button class="opt-btn sel" data-v="cast_iron" data-kg="12">Чавун 12кг</button>
+        <button class="opt-btn" data-v="steel"    data-kg="9">Сталь 9кг</button>
+        <button class="opt-btn" data-v="aluminum" data-kg="4">Алюміній 4кг</button>
+        <button class="opt-btn" data-v="titanium" data-kg="3">Титан 3кг</button>
+        <button class="opt-btn" data-v="carbon"   data-kg="1.5">Карбон 1.5кг</button>
+        <button class="opt-btn" data-v="custom"   data-kg="0">Власна</button>
+      </div>
+      <div class="slider-row" id="flywheel-custom-row" style="display:none">
+        <label>Маса кг</label>
+        <input type="range" id="flywheel-mass" min="0.5" max="50" step="0.5" value="12">
+        <span class="slider-val" id="flywheel-mass-val">12 кг</span>
+      </div>
+    </div>
+
+    <div class="build-card">
+      <div class="card-label">Матеріал циліндра</div>
+      <div class="opt-row" id="opt-cyl-mat">
+        <button class="opt-btn sel" data-v="cast_iron">Чавун</button>
+        <button class="opt-btn" data-v="steel">Сталь</button>
+        <button class="opt-btn" data-v="aluminum">Алюміній</button>
+        <button class="opt-btn" data-v="nikasil">Nikasil</button>
+        <button class="opt-btn" data-v="titanium">Титан</button>
+      </div>
+    </div>
+
+    <div class="build-card">
+      <div class="card-label">Шатун</div>
+      <div class="opt-row" id="opt-conrod">
+        <button class="opt-btn sel" data-v="std"      data-kg="0.6">Стандарт 0.6кг</button>
+        <button class="opt-btn" data-v="light"    data-kg="0.35">Полегш. 0.35кг</button>
+        <button class="opt-btn" data-v="heavy"    data-kg="1.1">Важкий 1.1кг</button>
+        <button class="opt-btn" data-v="titanium" data-kg="0.28">Титан 0.28кг</button>
+        <button class="opt-btn" data-v="h_beam"   data-kg="0.5">H-Beam 0.5кг</button>
+        <button class="opt-btn" data-v="i_beam"   data-kg="0.45">I-Beam 0.45кг</button>
+      </div>
+    </div>
+
+    <div class="build-card">
+      <div class="card-label">Клапани / циліндр</div>
+      <div class="opt-row" id="opt-valves">
+        <button class="opt-btn sel" data-v="2">2</button>
+        <button class="opt-btn" data-v="3">3</button>
+        <button class="opt-btn" data-v="4">4</button>
+        <button class="opt-btn" data-v="5">5</button>
+      </div>
+    </div>
+
+    <div class="build-card">
+      <div class="card-label">ГРМ</div>
+      <div class="opt-row" id="opt-vvt">
+        <button class="opt-btn sel" data-v="ohv">OHV</button>
+        <button class="opt-btn" data-v="sohc">SOHC</button>
+        <button class="opt-btn" data-v="dohc">DOHC</button>
+        <button class="opt-btn" data-v="vvt">DOHC+VVT</button>
+        <button class="opt-btn" data-v="vvtl">DOHC+VVTL</button>
+        <button class="opt-btn" data-v="desmo">Desmodromic</button>
+      </div>
+    </div>
+
+    <div class="build-card">
+      <div class="card-label">Пальне</div>
+      <div class="opt-row" id="opt-fuel">
+        <button class="opt-btn sel" data-v="petrol_92">Бензин 92</button>
+        <button class="opt-btn" data-v="petrol_95">Бензин 95</button>
+        <button class="opt-btn" data-v="petrol_98">Бензин 98</button>
+        <button class="opt-btn" data-v="diesel">Дизель</button>
+        <button class="opt-btn" data-v="e85">E85</button>
+        <button class="opt-btn" data-v="methanol">Метанол</button>
+        <button class="opt-btn" data-v="lpg">LPG</button>
+        <button class="opt-btn" data-v="hydrogen">Водень</button>
+      </div>
+    </div>
+
+    <div class="build-card">
+      <div class="card-label">Наддув</div>
+      <div class="opt-row" id="opt-turbo">
+        <button class="opt-btn sel" data-v="na">Атмо (NA)</button>
+        <button class="opt-btn" data-v="turbo_s">Turbo S</button>
+        <button class="opt-btn" data-v="turbo_m">Turbo M</button>
+        <button class="opt-btn" data-v="turbo_l">Turbo L</button>
+        <button class="opt-btn" data-v="twin_turbo">Twin Turbo</button>
+        <button class="opt-btn" data-v="supercharger">Supercharger</button>
+        <button class="opt-btn" data-v="procharger">Procharger</button>
+      </div>
+      <div class="slider-row">
+        <label>Тиск бар</label>
+        <input type="range" id="boost-pressure" min="0" max="3.5" step="0.1" value="0">
+        <span class="slider-val" id="boost-pressure-val">0.0 бар</span>
+      </div>
+    </div>
+
+    <div class="build-card full">
+      <div class="card-label">Параметри двигуна</div>
+      <div class="slider-row">
+        <label>Компресія</label>
+        <input type="range" id="compression" min="6" max="24" step="0.5" value="10">
+        <span class="slider-val" id="compression-val">10:1</span>
+      </div>
+      <div class="slider-row">
+        <label>Об'єм (л)</label>
+        <input type="range" id="displacement" min="0.3" max="10" step="0.05" value="2.0">
+        <span class="slider-val" id="displacement-val">2.00 л</span>
+      </div>
+      <div class="slider-row" style="align-items:flex-start; flex-direction:column; gap:4px">
+        <div style="display:flex;width:100%;align-items:center;gap:10px">
+          <label style="min-width:90px">Bore/Stroke</label>
+          <input type="range" id="bs-ratio" min="-100" max="100" step="1" value="0" style="flex:1">
+          <span class="slider-val" id="bs-ratio-val">Square</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;width:100%;padding:0 0 0 100px;font-size:9px;color:var(--dim)">
+          <span>◀ Довгий хід (торк)</span>
+          <span>Квадрат</span>
+          <span>(оберти) Короткий хід ▶</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;width:100%;padding:0 0 2px 100px;font-size:10px;color:var(--accent2)" id="bore-stroke-display">
+          <span id="bs-bore-val">bore: 86мм</span>
+          <span id="bs-stroke-val">stroke: 86мм</span>
+        </div>
+      </div>
+      <div class="slider-row">
+        <label>Довж. шатуна мм</label>
+        <input type="range" id="rod-length" min="80" max="250" step="1" value="150">
+        <span class="slider-val" id="rod-length-val">150 мм</span>
+      </div>
+      <div class="slider-row">
+        <label>Відсічка RPM</label>
+        <input type="range" id="rev-limiter" min="0" max="20000" step="100" value="0">
+        <span class="slider-val" id="rev-limiter-val">авто</span>
+      </div>
+      <div class="slider-row">
+        <label>Обрізання іскри</label>
+        <input type="range" id="spark-cut" min="2" max="150" step="1" value="15">
+        <span class="slider-val" id="spark-cut-val">15 мс</span>
+      </div>
+    </div>
+
+    <div class="build-card full" id="spec-summary">
+      <div class="card-label">Розрахункові характеристики</div>
+      <div id="spec-rows"></div>
+    </div>
+
+  </div><!-- /build-grid -->
+
+  <button class="start-btn" id="btn-launch">▶ У СИМУЛЯТОР</button>
+  <div style="height:20px"></div>
+</div>
+
+<!-- ======= RUN SCREEN ======= -->
+<div id="run-screen" class="screen">
+  <canvas id="engine-canvas"></canvas>
+
+  <div class="warn-bar">
+    <span class="warn-pill warn-knock"    id="pill-knock">KNOCK</span>
+    <span class="warn-pill warn-overheat" id="pill-heat">OVERHEAT</span>
+    <span class="warn-pill warn-lean"     id="pill-lean">LEAN</span>
+    <span class="warn-pill warn-rich"     id="pill-rich">RICH</span>
+    <span class="warn-pill warn-stall"    id="pill-stall">STALL</span>
+    <span class="warn-pill warn-sparkcut" id="pill-sparkcut">SPARK CUT</span>
+  </div>
+
+  <div class="gauges">
+    <div class="rpm-arc-wrap">
+      <svg id="rpm-arc-svg" viewBox="0 0 90 55">
+        <path id="rpm-bg-arc" d="" stroke="#2a2f3a" stroke-width="7" fill="none"/>
+        <path id="rpm-fg-arc" d="" stroke="#e85d00" stroke-width="7" fill="none" stroke-linecap="round"/>
+      </svg>
+      <div class="rpm-number" id="rpm-display">0</div>
+    </div>
+    <div class="gauge">
+      <div class="gauge-label">Торк</div>
+      <div class="gauge-val" id="g-torque">0</div>
+      <div class="gauge-unit">Нм</div>
+    </div>
+    <div class="gauge">
+      <div class="gauge-label">Потужн</div>
+      <div class="gauge-val" id="g-power">0</div>
+      <div class="gauge-unit">кВт</div>
+    </div>
+    <div class="gauge">
+      <div class="gauge-label">Tдвиг</div>
+      <div class="gauge-val" id="g-etemp">20</div>
+      <div class="gauge-unit">°C</div>
+    </div>
+    <div class="gauge">
+      <div class="gauge-label">Tповіт</div>
+      <div class="gauge-val" id="g-atemp">20</div>
+      <div class="gauge-unit">°C</div>
+    </div>
+    <div class="gauge">
+      <div class="gauge-label">AFR</div>
+      <div class="gauge-val" id="g-afr">—</div>
+      <div class="gauge-unit">:1</div>
+    </div>
+    <div class="gauge">
+      <div class="gauge-label">Boost</div>
+      <div class="gauge-val" id="g-boost">0.0</div>
+      <div class="gauge-unit">бар</div>
+    </div>
+  </div>
+
+  <div class="data-log" id="data-log">Двигун зупинено. Натисни ЗАПУСК.</div>
+
+  <div class="controls">
+
+    <div class="ctrl-row">
+      <span class="ctrl-label">🔥 Газ</span>
+      <input type="range" id="throttle-slider" class="ctrl-slider" min="0" max="100" step="1" value="0">
+      <span class="ctrl-val" id="throttle-val">0%</span>
+    </div>
+
+    <div class="ctrl-row">
+      <span class="ctrl-label">⚙ Х.Хід</span>
+      <input type="range" id="idle-slider" class="ctrl-slider" min="400" max="3000" step="10" value="750"
+             style="background: linear-gradient(to right, #1a2a1a, #00e87a);">
+      <span class="ctrl-val" id="idle-val">750 rpm</span>
+    </div>
+
+    <div class="ctrl-row">
+      <span class="ctrl-label">✂ Відсічка</span>
+      <input type="range" id="revlimit-slider" class="ctrl-slider" min="0" max="20000" step="100" value="0"
+             style="background: linear-gradient(to right, #2a1a1a, #e82020);">
+      <span class="ctrl-val" id="revlimit-val">авто</span>
+    </div>
+
+    <div class="ctrl-row">
+      <span class="ctrl-label">⚡ Іскра мс</span>
+      <input type="range" id="sparkcut-slider" class="ctrl-slider" min="2" max="150" step="1" value="15"
+             style="background: linear-gradient(to right, #1a1a2a, #6090ff);">
+      <span class="ctrl-val" id="sparkcut-val">15 мс</span>
+    </div>
+
+    <div class="ctrl-row">
+      <span class="ctrl-label">🌡 Повітря</span>
+      <input type="range" id="temp-slider" class="ctrl-slider" min="-40" max="50" step="1" value="20">
+      <span class="ctrl-val" id="temp-val">+20°C</span>
+    </div>
+
+    <div class="sound-row">
+      <span class="ctrl-label">🔊 Звук</span>
+      <button class="sound-toggle" id="btn-sound">ВИМКНЕНО</button>
+      <button class="sound-toggle on" id="btn-crack">CRACK ВКЛ</button>
+      <button class="sound-toggle on" id="btn-turbo-snd">TURBO ВКЛ</button>
+    </div>
+    <div class="sound-row">
+      <span class="ctrl-label">Ефекти</span>
+      <button class="sound-toggle" id="btn-vib" style="margin-left:0">ТРЯСКА ВКЛ</button>
+      <button class="sound-toggle on" id="btn-smoke">ДИМ ВКЛ</button>
+    </div>
+
+    <div class="btn-row">
+      <button class="ctrl-btn" id="btn-start-engine">⚡ ЗАПУСК</button>
+      <button class="ctrl-btn" id="btn-stop-engine">■ СТОП</button>
+      <button class="ctrl-btn" id="btn-back">◀ НАЗАД</button>
+    </div>
+
+  </div>
+</div>
+
+<canvas id="smoke-canvas"></canvas>
+
+<!-- ======= SCRIPTS ======= -->
+<script src="engine.js"></script>
+<script src="sound.js"></script>
+<script>
+// ======================================================
+// MAIN — з'єднує engine.js + sound.js
+// ======================================================
+
+const canvas     = document.getElementById('engine-canvas');
+const ctx2d      = canvas.getContext('2d');
+const smokeCanvas= document.getElementById('smoke-canvas');
+const sctx       = smokeCanvas.getContext('2d');
+
+let animId       = null;
+let soundEnabled = false;
+const engineSound= new EngineSound();
+
+// ---- resize ----
+function resizeAll() {
+  const W = window.innerWidth;
+  const h = Math.min(200, W * 0.36);
+  canvas.width  = W;
+  canvas.height = h;
+  canvas.style.height = h + 'px';
+
+  smokeCanvas.width  = W;
+  smokeCanvas.height = window.innerHeight;
+  smokeCanvas.style.width  = W + 'px';
+  smokeCanvas.style.height = window.innerHeight + 'px';
+}
+
+// ---- Main loop ----
+function mainLoop(ts) {
+  const dt = Math.min(0.05, (ts - (state.lastTime || ts)) / 1000);
+  state.lastTime = ts;
+
+  physicsTick(dt);
+  drawEngine(canvas, ctx2d);
+  drawRPMArc();
+  updateSmoke(smokeCanvas, sctx, dt, smokeEnabled);
+  updateGaugesUI();
+  updateVibration();
+
+  // Sound update
+  if (soundEnabled) {
+    engineSound.update({
+      running:        state.running,
+      rpm:            state.rpm,
+      cylinders:      cfg.cylinders,
+      throttle:       state.throttle,
+      boost:          state.boost,
+      knock:          state.knock,
+      stall:          state.stall,
+      sparkCutActive: state.sparkCutActive,
+      turboType:      cfg.turboType,
+      crackEnabled,
+      turboSndEnabled,
+    });
+  }
+
+  animId = requestAnimationFrame(mainLoop);
+}
+
+// ---- UI updates ----
+function updateGaugesUI() {
+  document.getElementById('rpm-display').textContent = Math.round(state.rpm);
+  document.getElementById('g-torque').textContent    = state.torque.toFixed(0);
+  document.getElementById('g-power').textContent     = (state.power / 1000).toFixed(1);
+  document.getElementById('g-etemp').textContent     = state.engineTemp.toFixed(0);
+  document.getElementById('g-atemp').textContent     = state.ambientTemp.toFixed(0);
+  document.getElementById('g-afr').textContent       = state.afr.toFixed(1);
+  document.getElementById('g-boost').textContent     = state.boost.toFixed(2);
+
+  const et = state.engineTemp;
+  document.getElementById('g-etemp').style.color =
+    et > 105 ? '#e82020' : et > 90 ? '#ffa033' : et < 40 ? '#4488ff' : '#00e87a';
+
+  setPill('pill-knock', state.knock);
+  setPill('pill-heat',  state.overheat);
+  setPill('pill-lean',  state.lean);
+  setPill('pill-rich',  state.rich);
+  setPill('pill-stall', state.stall);
+  setPill('pill-sparkcut', state.sparkCutActive);
+
+  document.getElementById('data-log').textContent =
+    `RPM:${Math.round(state.rpm)} | T:${state.torque.toFixed(0)}Нм | ` +
+    `P:${(state.power/1000).toFixed(1)}кВт | Teng:${state.engineTemp.toFixed(0)}°C | ` +
+    `AFR:${state.afr.toFixed(1)} | Boost:${state.boost.toFixed(2)}бар | ` +
+    `Knock:${state.knock?'YES':'no'} | Stall:${state.stall?'YES':'no'}`;
+}
+
+function setPill(id, active) {
+  document.getElementById(id).classList.toggle('active', active);
+}
+
+function updateVibration() {
+  const amp = state.vibAmp;
+  const run = document.getElementById('run-screen');
+  if (amp > 0.5) {
+    run.classList.add('vibrating');
+    run.style.animationDuration = Math.max(0.04, 0.12 - amp * 0.015) + 's';
+  } else {
+    run.classList.remove('vibrating');
+  }
+}
+
+// ---- BUILD SCREEN CONTROLS ----
+function makeOptGroup(id, key) {
+  document.getElementById(id).querySelectorAll('.opt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById(id).querySelectorAll('.opt-btn').forEach(b => b.classList.remove('sel'));
+      btn.classList.add('sel');
+      cfg[key] = isNaN(btn.dataset.v) ? btn.dataset.v : Number(btn.dataset.v);
+      computeSpec();
+    });
+  });
+}
+
+makeOptGroup('opt-cylinders', 'cylinders');
+makeOptGroup('opt-cyl-mat',   'cylMat');
+makeOptGroup('opt-vvt',       'camType');
+makeOptGroup('opt-valves',    'valvesPerCyl');
+makeOptGroup('opt-fuel',      'fuelType');
+
+// Flywheel
+document.getElementById('opt-flywheel-mat').querySelectorAll('.opt-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('opt-flywheel-mat').querySelectorAll('.opt-btn').forEach(b => b.classList.remove('sel'));
+    btn.classList.add('sel');
+    if (btn.dataset.v === 'custom') {
+      document.getElementById('flywheel-custom-row').style.display = 'flex';
+    } else {
+      document.getElementById('flywheel-custom-row').style.display = 'none';
+      cfg.flywheelMass = parseFloat(btn.dataset.kg);
+    }
+    computeSpec();
+  });
+});
+document.getElementById('flywheel-mass').addEventListener('input', function() {
+  cfg.flywheelMass = parseFloat(this.value);
+  document.getElementById('flywheel-mass-val').textContent = cfg.flywheelMass + ' кг';
+  computeSpec();
+});
+
+// Conrod
+document.getElementById('opt-conrod').querySelectorAll('.opt-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('opt-conrod').querySelectorAll('.opt-btn').forEach(b => b.classList.remove('sel'));
+    btn.classList.add('sel');
+    cfg.conrodMass = parseFloat(btn.dataset.kg);
+    cfg.conrodType = btn.dataset.v;
+    computeSpec();
+  });
+});
+
+// Turbo
+document.getElementById('opt-turbo').querySelectorAll('.opt-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('opt-turbo').querySelectorAll('.opt-btn').forEach(b => b.classList.remove('sel'));
+    btn.classList.add('sel');
+    cfg.turboType = btn.dataset.v;
+    const isNA = cfg.turboType === 'na';
+    document.getElementById('boost-pressure').disabled = isNA;
+    if (isNA) { cfg.boostTarget = 0; document.getElementById('boost-pressure').value = 0; }
+    computeSpec();
+  });
+});
+document.getElementById('boost-pressure').addEventListener('input', function() {
+  cfg.boostTarget = parseFloat(this.value);
+  document.getElementById('boost-pressure-val').textContent = cfg.boostTarget.toFixed(1) + ' бар';
+  computeSpec();
+});
+
+// Sliders
+document.getElementById('compression').addEventListener('input', function() {
+  cfg.compression = parseFloat(this.value);
+  document.getElementById('compression-val').textContent = parseFloat(this.value).toFixed(1) + ':1';
+  computeSpec();
+});
+
+document.getElementById('displacement').addEventListener('input', function() {
+  cfg.displacement = parseFloat(this.value);
+  document.getElementById('displacement-val').textContent = parseFloat(this.value).toFixed(2) + ' л';
+  computeSpec();
+  updateBSDisplay();
+});
+
+document.getElementById('bs-ratio').addEventListener('input', function() {
+  cfg.bsRatioSlider = parseInt(this.value);
+  const v = cfg.bsRatioSlider;
+  const label = v === 0 ? 'Square' : v > 0 ? `+${v} Oversquare` : `${v} Long-stroke`;
+  document.getElementById('bs-ratio-val').textContent = label;
+  computeSpec();
+  updateBSDisplay();
+});
+
+function updateBSDisplay() {
+  const s = window.spec;
+  if (!s || !s.bore) return;
+  document.getElementById('bs-bore-val').textContent   = 'bore: ' + (s.bore*1000).toFixed(1) + 'мм';
+  document.getElementById('bs-stroke-val').textContent = 'stroke: ' + (s.stroke*1000).toFixed(1) + 'мм';
+}
+
+document.getElementById('rod-length').addEventListener('input', function() {
+  cfg.conrodLength = parseFloat(this.value) / 1000;
+  document.getElementById('rod-length-val').textContent = this.value + ' мм';
+  computeSpec();
+});
+
+document.getElementById('rev-limiter').addEventListener('input', function() {
+  cfg.revLimiterTarget = parseInt(this.value);
+  document.getElementById('rev-limiter-val').textContent =
+    cfg.revLimiterTarget > 0 ? cfg.revLimiterTarget + ' rpm' : 'авто';
+  computeSpec();
+});
+
+document.getElementById('spark-cut').addEventListener('input', function() {
+  cfg.sparkCutMs = parseInt(this.value);
+  document.getElementById('spark-cut-val').textContent = this.value + ' мс';
+  computeSpec();
+});
+
+// ---- LAUNCH ----
+document.getElementById('btn-launch').addEventListener('click', () => {
+  computeSpec();
+  // Sync idle slider to computed idle if user hasn't set custom
+  if (cfg.idleRPMTarget === 0) {
+    const autoIdle = spec.idleRPM;
+    document.getElementById('idle-slider').value = Math.round(autoIdle);
+    document.getElementById('idle-val').textContent = Math.round(autoIdle) + ' rpm';
+    cfg.idleRPMTarget = Math.round(autoIdle);
+  }
+  // Sync rev limiter slider/display between screens
+  document.getElementById('revlimit-slider').value = cfg.revLimiterTarget;
+  document.getElementById('revlimit-val').textContent =
+    cfg.revLimiterTarget > 0 ? cfg.revLimiterTarget + ' rpm' : 'авто (' + Math.round(spec.revLimiterRPM) + ')';
+  document.getElementById('sparkcut-slider').value = cfg.sparkCutMs;
+  document.getElementById('sparkcut-val').textContent = cfg.sparkCutMs + ' мс';
+
+  Object.assign(state, {
+    running:false, rpm:0, omega:0, crankAngle:0,
+    engineTemp: state.ambientTemp,
+    pistonY: new Array(cfg.cylinders).fill(0.5),
+    smokeParticles:[],
+    lastTime:0,
+    sparkCutActive:false,
+    sparkCutTimer:0,
+  });
+  document.getElementById('build-screen').classList.remove('active');
+  document.getElementById('run-screen').classList.add('active');
+  document.getElementById('smoke-canvas').style.display = 'block';
+  resizeAll();
+  if (animId) cancelAnimationFrame(animId);
+  animId = requestAnimationFrame(mainLoop);
+});
+
+// ---- ENGINE CONTROLS ----
+document.getElementById('btn-start-engine').addEventListener('click', () => {
+  engineSound.resume();
+  if (!state.running) {
+    // Стартер розганяє до ~65% холостого — достатньо щоб двигун "схопив"
+    const idleRPM    = (cfg.idleRPMTarget > 0) ? cfg.idleRPMTarget : spec.idleRPM;
+    state.omega      = idleRPM * 2 * Math.PI / 60 * 0.65;
+    state.engineTemp = Math.max(state.ambientTemp, state.engineTemp);
+    state.running    = true;
+    if (soundEnabled) engineSound.playStarter();
+  }
+});
+
+document.getElementById('btn-stop-engine').addEventListener('click', () => {
+  state.running = false;
+});
+
+document.getElementById('btn-back').addEventListener('click', () => {
+  state.running = false;
+  cfg.idleRPMTarget = 0;
+  if (animId) cancelAnimationFrame(animId);
+  document.getElementById('run-screen').classList.remove('active');
+  document.getElementById('build-screen').classList.add('active');
+  document.getElementById('smoke-canvas').style.display = 'none';
+});
+
+// ---- SOUND TOGGLE ----
+document.getElementById('btn-sound').addEventListener('click', () => {
+  soundEnabled = !soundEnabled;
+  const btn = document.getElementById('btn-sound');
+  if (soundEnabled) {
+    engineSound.init();
+    engineSound.resume();
+    btn.textContent = 'УВІМКНЕНО';
+    btn.classList.add('on');
+  } else {
+    btn.textContent = 'ВИМКНЕНО';
+    btn.classList.remove('on');
+  }
+});
+
+// ---- THROTTLE ----
+document.getElementById('throttle-slider').addEventListener('input', function() {
+  state.throttle = parseInt(this.value) / 100;
+  document.getElementById('throttle-val').textContent = this.value + '%';
+  if (soundEnabled) engineSound.resume();
+});
+
+// ---- IDLE RPM ----
+document.getElementById('idle-slider').addEventListener('input', function() {
+  cfg.idleRPMTarget = parseInt(this.value);
+  document.getElementById('idle-val').textContent = this.value + ' rpm';
+});
+
+// ---- REV LIMITER (наживо) ----
+document.getElementById('revlimit-slider').addEventListener('input', function() {
+  cfg.revLimiterTarget = parseInt(this.value);
+  document.getElementById('revlimit-val').textContent =
+    cfg.revLimiterTarget > 0 ? cfg.revLimiterTarget + ' rpm' : 'авто';
+  computeSpec();
+  // sync build screen slider too
+  document.getElementById('rev-limiter').value = this.value;
+  document.getElementById('rev-limiter-val').textContent =
+    cfg.revLimiterTarget > 0 ? cfg.revLimiterTarget + ' rpm' : 'авто';
+});
+
+// ---- SPARK CUT DURATION (наживо) ----
+document.getElementById('sparkcut-slider').addEventListener('input', function() {
+  cfg.sparkCutMs = parseInt(this.value);
+  document.getElementById('sparkcut-val').textContent = this.value + ' мс';
+  document.getElementById('spark-cut').value = this.value;
+  document.getElementById('spark-cut-val').textContent = this.value + ' мс';
+});
+
+let crackEnabled = true;
+let turboSndEnabled = true;
+
+document.getElementById('btn-crack').addEventListener('click', function() {
+  crackEnabled = !crackEnabled;
+  this.textContent = crackEnabled ? 'CRACK ВКЛ' : 'CRACK ВИКЛ';
+  this.classList.toggle('on', crackEnabled);
+});
+document.getElementById('btn-turbo-snd').addEventListener('click', function() {
+  turboSndEnabled = !turboSndEnabled;
+  this.textContent = turboSndEnabled ? 'TURBO ВКЛ' : 'TURBO ВИКЛ';
+  this.classList.toggle('on', turboSndEnabled);
+});
+
+// ---- VIBRATION TOGGLE ----
+document.getElementById('btn-vib').addEventListener('click', function() {
+  cfg.vibrationEnabled = !cfg.vibrationEnabled;
+  this.textContent = cfg.vibrationEnabled ? 'ТРЯСКА ВКЛ' : 'ТРЯСКА ВИКЛ';
+  this.classList.toggle('on', cfg.vibrationEnabled);
+  if (!cfg.vibrationEnabled) {
+    document.getElementById('run-screen').classList.remove('vibrating');
+  }
+});
+
+// ---- SMOKE TOGGLE ----
+let smokeEnabled = true;
+document.getElementById('btn-smoke').addEventListener('click', function() {
+  smokeEnabled = !smokeEnabled;
+  this.textContent = smokeEnabled ? 'ДИМ ВКЛ' : 'ДИМ ВИКЛ';
+  this.classList.toggle('on', smokeEnabled);
+  if (!smokeEnabled) {
+    state.smokeParticles = [];
+    sctx.clearRect(0, 0, smokeCanvas.width, smokeCanvas.height);
+  }
+});
+
+// ---- AMBIENT TEMP ----
+document.getElementById('temp-slider').addEventListener('input', function() {
+  state.ambientTemp = parseInt(this.value);
+  const v = state.ambientTemp;
+  document.getElementById('temp-val').textContent = (v >= 0 ? '+' : '') + v + '°C';
+});
+
+// ---- RESIZE ----
+window.addEventListener('resize', resizeAll);
+
+// ---- INIT ----
+computeSpec();
+updateBSDisplay();
+resizeAll();
+</script>
+</body>
+</html>
