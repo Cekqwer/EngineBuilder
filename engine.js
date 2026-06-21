@@ -452,10 +452,14 @@ window.physicsTick = function(dt) {
 
   // ── ТЕМПЕРАТУРА ДВИГУНА ───────────────────────────────
   // Тепловхід пропорційний роботі за цикл
-  const heatIn  = Q_total * 0.35 * dt * 0.0001; // 35% тепла йде в блок
-  const coolSpd = 0.6 + s.omega / 2500;
-  const heatOut = (s.engineTemp - s.ambientTemp) * coolSpd * dt;
-  s.engineTemp  = Math.max(s.ambientTemp, Math.min(140, s.engineTemp + heatIn - heatOut));
+  // Теплоємність блоку ~ маса двигуна (оцінка з об'єму) × питома теплоємність чавуну/алюм.
+  const engineMassKg = 40 + sp.totalDisp * 1e6 * 0.045; // ~40кг база + по масі від об'єму
+  const thermalCap   = engineMassKg * 480; // Дж/°C (питома теплоємність ~480 Дж/кг°C)
+  const heatIn  = Q_total * 0.28; // ~28% тепла йде в блок (решта у вихлоп/корисну роботу)
+  const targetTemp = 90; // термостат тримає робочу температуру ~90°C
+  const coolSpd = (0.025 + s.omega / 3500) * (s.engineTemp > targetTemp ? 1 : 0.4); // термостат: повільніше охолодження поки не нагрівся
+  const heatOut = (s.engineTemp - s.ambientTemp) * coolSpd;
+  s.engineTemp  = Math.max(s.ambientTemp, Math.min(140, s.engineTemp + (heatIn / thermalCap) - heatOut * dt));
   s.overheat    = s.engineTemp > 105;
 
   // ── ВІБРАЦІЯ ──────────────────────────────────────────
