@@ -453,6 +453,19 @@ body {
     </div>
 
     <div class="build-card">
+      <div class="card-label">Система живлення</div>
+      <div class="opt-row" id="opt-injection">
+        <button class="opt-btn" data-v="carb">Карбюратор</button>
+        <button class="opt-btn sel" data-v="tbi">Моновпорск (TBI)</button>
+        <button class="opt-btn" data-v="mpfi">Розподілений (MPFI)</button>
+        <button class="opt-btn" data-v="gdi">Прямий (GDI)</button>
+        <button class="opt-btn" data-v="mech_pump">ТНВД механічний</button>
+        <button class="opt-btn" data-v="common_rail">Common Rail</button>
+        <button class="opt-btn" data-v="unit_injector">Насос-форсунки</button>
+      </div>
+    </div>
+
+    <div class="build-card">
       <div class="card-label">Наддув</div>
       <div class="opt-row" id="opt-turbo">
         <button class="opt-btn sel" data-v="na">Атмо (NA)</button>
@@ -762,6 +775,7 @@ makeOptGroup('opt-cyl-mat',   'cylMat');
 makeOptGroup('opt-vvt',       'camType');
 makeOptGroup('opt-valves',    'valvesPerCyl');
 makeOptGroup('opt-fuel',      'fuelType');
+makeOptGroup('opt-injection', 'injectionType');
 
 // Flywheel
 document.getElementById('opt-flywheel-mat').querySelectorAll('.opt-btn').forEach(btn => {

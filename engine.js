@@ -29,6 +29,22 @@ const CAM_RPM_PEAK = {
   ohv: 4500, sohc: 5500, dohc: 6500, vvt: 7000, vvtl: 7500, desmo: 9000
 };
 
+// ── СИСТЕМИ ЖИВЛЕННЯ ──────────────────────────────────────
+// veMult: вплив на наповнення циліндра (точність дозування)
+// afrPrecision: 1.0=ідеальне дозування, менше=більший розкид AFR
+// throttleResponseTau: інерція відгуку на газ (сек) — карбюратор повільніший
+// idleQuality: якість холостого ходу (менше=більш нестабільний)
+// maxCompression: максимальна компресія яку система дозволяє без проблем
+const INJECTION = {
+  carb:          { veMult: 0.92, afrPrecision: 0.78, throttleTau: 0.18, idleQuality: 0.70, maxCompression: 11.5, label: 'Карбюратор' },
+  tbi:           { veMult: 0.95, afrPrecision: 0.88, throttleTau: 0.10, idleQuality: 0.85, maxCompression: 12.0, label: 'Моновпорск' },
+  mpfi:          { veMult: 1.00, afrPrecision: 0.97, throttleTau: 0.04, idleQuality: 0.96, maxCompression: 13.0, label: 'Розподілений' },
+  gdi:           { veMult: 1.05, afrPrecision: 0.99, throttleTau: 0.025,idleQuality: 0.98, maxCompression: 14.5, label: 'Прямий впорск' },
+  mech_pump:     { veMult: 0.90, afrPrecision: 0.75, throttleTau: 0.15, idleQuality: 0.65, maxCompression: 22.0, label: 'ТНВД механічний' },
+  common_rail:   { veMult: 1.02, afrPrecision: 0.96, throttleTau: 0.03, idleQuality: 0.95, maxCompression: 24.0, label: 'Common Rail' },
+  unit_injector: { veMult: 1.00, afrPrecision: 0.93, throttleTau: 0.05, idleQuality: 0.90, maxCompression: 23.0, label: 'Насос-форсунки' },
+};
+
 const TURBO_DATA = {
   na:           { spoolRPM: 0,    maxBoost: 0,    efficiency: 0 },
   turbo_s:      { spoolRPM: 2000, maxBoost: 0.8,  efficiency: 0.68 },
@@ -53,6 +69,7 @@ window.cfg = {
   valvesPerCyl:    2,
   camType:         'ohv',
   fuelType:        'petrol_92',
+  injectionType:   'tbi',
   turboType:       'na',
   boostTarget:     0,
   compression:     10,
@@ -94,6 +111,7 @@ window.state = {
   lastTime:     0,
   smokeParticles:[],
   idleTrim: 0,
+  throttleActual: 0,
   sparkCutActive: false,
   sparkCutTimer: 0, // секунди що залишилось до повернення іскри
 };
@@ -139,13 +157,13 @@ window.computeSpec = function() {
   const Iconrod = c.cylinders * c.conrodMass * crankR * crankR;
   const Itotal  = Ifw + Ipiston + Iconrod + 0.08;
 
-  const ve_peak     = CAM_VE[c.camType];
+  const ve_peak     = CAM_VE[c.camType] * INJECTION[c.injectionType].veMult;
   const td          = TURBO_DATA[c.turboType];
   const boostFactor = 1 + c.boostTarget * (1 + td.efficiency * 0.3);
   const gammaFuel   = c.fuelType === 'diesel' ? 1.35 : 1.40;
   const etaOtto     = 1 - Math.pow(c.compression, 1 - gammaFuel);
   const fricFactor  = CYL_MAT_FRIC[c.cylMat];
-  const baseBMEP    = 9.5e5;
+  const baseBMEP    = 18.8e5; // калібровано на реальний атмо BMEP ~9.5бар (ВАЗ-клас)
   const bmepPeak    = baseBMEP * ve_peak * boostFactor * etaOtto / fricFactor;
   const peakTorque  = bmepPeak * totalDisp / (4 * Math.PI);
 
@@ -202,6 +220,7 @@ function updateSummaryUI() {
     ['Пікова потужність',   (s.peakPower/1000).toFixed(1) + ' кВт / ' + (s.peakPower/745.7).toFixed(0) + ' к.с.'],
     ['Оберти піку',         s.rpmPeak.toFixed(0) + ' RPM'],
     ['Холостий хід',        s.idleRPM.toFixed(0) + ' RPM'],
+    ['Система живлення',    INJECTION[c.injectionType].label],
     ['Відсічка (ціль)',     (c.revLimiterTarget > 0 ? c.revLimiterTarget : 'авто ' + Math.round(s.revLimiterRPM)) + ' RPM'],
     ['Механічна межа',      Math.round(s.mechanicalCeiling) + ' RPM (клапани/шатуни)'],
     ['Обрізання іскри',     c.sparkCutMs + ' мс'],
@@ -295,7 +314,14 @@ window.physicsTick = function(dt) {
   // плюс idleTrim — корекція від регулятора холостого ходу (IACV).
   // Педаль газу нелінійна (як справжній дросель): квадратична крива —
   // перші 30-40% натискання дають малий приріст заряду, решта різкіша.
-  const throttleCurve = s.throttle * s.throttle * (3 - 2 * s.throttle); // smoothstep
+  // ── ВІДГУК ДРОСЕЛЯ (лаг системи живлення) ─────────────
+  // Карбюратор/механічний ТНВД реагують на педаль повільніше
+  // (паливна плівка в дифузорі, механічна інерція рейки),
+  // інжектор з ЕБУ — майже миттєво.
+  const inj = INJECTION[c.injectionType];
+  if (s.throttleActual === undefined) s.throttleActual = s.throttle;
+  s.throttleActual += (s.throttle - s.throttleActual) * Math.min(1, dt / inj.throttleTau);
+  const throttleCurve = s.throttleActual * s.throttleActual * (3 - 2 * s.throttleActual); // smoothstep
   const idleThrottleFrac = 0.08 + s.idleTrim;
   const effectiveThrottle = Math.max(0.02, Math.min(1,
     idleThrottleFrac + throttleCurve * (1.0 - 0.08)));
@@ -311,6 +337,10 @@ window.physicsTick = function(dt) {
     // WOT збагачення
     targetAFR = f.stoich * 0.93;
   }
+  // Точність дозування системи живлення: карбюратор/ТНВД гуляють по AFR,
+  // інжектор з ЕБУ тримає майже ідеально
+  const afrNoise = (1 - inj.afrPrecision) * 0.18 * (Math.random() * 2 - 1);
+  targetAFR *= (1 + afrNoise);
   s.afr  = targetAFR;
   s.lean = targetAFR > f.stoich * 1.06;
   s.rich = targetAFR < f.stoich * 0.88;
@@ -349,7 +379,10 @@ window.physicsTick = function(dt) {
   // BMEP (Па): тиск на поршень за цикл
   const bmep = Q_total / sp.totalDisp;
   const T_endgas = T_K * Math.pow(c.compression * pressureRatio, sp.gammaFuel - 1);
-  const T_knock  = 800 + (f.octane - 92) * 8;
+  // Системи живлення з гіршим розподілом суміші (карбюратор/механічний ТНВД)
+  // провокують детонацію раніше, якщо компресія вища за їх "комфортну" межу
+  const compOverLimit = Math.max(0, c.compression - inj.maxCompression);
+  const T_knock  = 800 + (f.octane - 92) * 8 - compOverLimit * 25;
   s.knock = T_endgas > T_knock && s.running && s.throttle > 0.1;
 
   // ── КРУТНИЙ МОМЕНТ ────────────────────────────────────
@@ -397,9 +430,13 @@ window.physicsTick = function(dt) {
   // (Ця корекція застосована вище в effectiveThrottle через s.idleTrim)
   if (s.throttle < 0.02) {
     const rpmErr = idleRPM - s.rpm;            // >0 — обертів замало, треба більше газу
-    // Інтегрально-пропорційна корекція, повільна (steady-state regulator)
-    s.idleTrim += rpmErr * 0.00006 * dt * 60;  // нормалізовано під 60fps базу
-    s.idleTrim = Math.max(-0.05, Math.min(0.35, s.idleTrim));
+    // Інтегрально-пропорційна корекція, швидкість залежить від якості системи
+    // (карбюратор/ТНВД регулюють холостий гірше і повільніше за ЕБУ-інжектор)
+    const idleGain = 0.00006 * inj.idleQuality;
+    s.idleTrim += rpmErr * idleGain * dt * 60;
+    // Нестабільні системи (карбюратор) додають невелике тремтіння холостого
+    const idleWobble = (1 - inj.idleQuality) * 0.015 * (Math.random() * 2 - 1);
+    s.idleTrim = Math.max(-0.05, Math.min(0.35, s.idleTrim + idleWobble));
   } else {
     // При натиснутому газі trim повільно затухає до нуля
     s.idleTrim *= Math.max(0, 1 - dt * 2);
